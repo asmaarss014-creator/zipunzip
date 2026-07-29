@@ -1,0 +1,55 @@
+name: Python Zip Manager
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allows manual running
+
+jobs:
+  run-python-unzip:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to push changes back to the repo
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Decompress Files using Python Script
+        run: |
+          # 1. Auto-detect the first .zip file in the repo (prevents "file not found" errors)
+          ZIP_FILE=$(find . -name "*.zip" -print -quit)
+          
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ℹ️ No .zip file found in the repository. Skipping decompression."
+            exit 0
+          fi
+          
+          echo "📦 Found zip file: $ZIP_FILE"
+          
+          # 2. Run the Python script to decompress into the current directory (.)
+          python zip_manager.py decompress "$ZIP_FILE" .
+
+      - name: Commit and Push Changes (Bypassing .gitignore)
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # -f (force) bypasses .gitignore rules
+          # -A (all) stages new, modified, and deleted files
+          git add -f -A .
+          
+          # Commit and push if there are changes
+          if ! git diff --staged --quiet; then
+            git commit -m "🤖 Auto-unzipped files via Python script"
+            git push
+            echo "✅ Changes pushed to the repository."
+          else
+            echo "ℹ️ No changes to commit (extracted files match existing files)."
+          fi
