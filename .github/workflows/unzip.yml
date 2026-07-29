@@ -1,0 +1,60 @@
+name: Auto-Unzip on Push
+
+# This triggers the workflow automatically whenever files are pushed to the repo.
+# If no zip file is present, it will simply skip and pass successfully.
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch: # Allows you to manually trigger it from the Actions tab
+
+jobs:
+  auto-unzip:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to commit the unzipped files back to the repo
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Search for Zip and Extract
+        run: |
+          # 1. Search for any .zip or .ZIP file in the entire repository
+          # -iname makes it case-insensitive (catches file.zip, FILE.ZIP, etc.)
+          ZIP_FILE=$(find . -type f -iname "*.zip" -print -quit)
+
+          # 2. If no zip file is found, exit successfully (green checkmark) without erroring
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ℹ️ No .zip file found in the repository. Nothing to do. Exiting gracefully."
+            exit 0
+          fi
+
+          echo "📦 Found zip file: $ZIP_FILE"
+
+          # 3. Extract the zip file to the root directory (.)
+          # -o = Overwrite existing files without prompting (prevents errors/hangs)
+          # -q = Quiet mode (keeps logs clean)
+          unzip -o -q "$ZIP_FILE" -d "."
+
+          echo "✅ Files extracted and overwritten successfully!"
+
+      - name: Commit and Push Changes (Bypassing .gitignore)
+        run: |
+          # Configure Git with the GitHub Actions bot
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Force add all files. 
+          # The -f flag bypasses .gitignore so extracted files are always tracked.
+          git add -f -A .
+
+          # Check if there are any changes to commit
+          if ! git diff --staged --quiet; then
+            git commit -m "🤖 Auto-unzipped and overwrote files via GitHub Actions"
+            git push
+            echo "✅ Changes pushed to the repository."
+          else
+            echo "ℹ️ No changes to commit (unzipped files were already present and up to date)."
+          fi
